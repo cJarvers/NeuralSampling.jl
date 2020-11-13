@@ -1,0 +1,7 @@
+name = "NeuralSampling"
+uuid = "676032de-307c-4786-9de8-1130a5caa8dd"
+authors = ["christian <christian.jarvers@uni-ulm.de>"]
+version = "0.1.0"
+
+[deps]
+Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
