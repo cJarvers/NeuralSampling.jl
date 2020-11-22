@@ -324,7 +324,7 @@ Performs one step of neural sampling with relative refractory period in `net`
 while clamping the neurons at indices `clamp_on` to `true` and the neurons at
 indices `clamp_off` to `false`.
 """
-function step_relative_clamp!(net::BoltzmannNetwork, clamp_on, clamp_off)
+function step_clamp!(net::BoltzmannNetwork, clamp_on, clamp_off)
     spikes = zeros(Bool, length(net.z))
     # update neurons
     # (in order, since transition operators have to be applied sequentially)
