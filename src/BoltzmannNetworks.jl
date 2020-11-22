@@ -24,6 +24,8 @@ following methods from the paper:
 """
 module BoltzmannNetworks
 
+using ..Utils: σ
+
 import Base: show
 export BoltzmannNetwork
 export randomnetwork, sample_absolute!, sample_relative!
@@ -49,29 +51,33 @@ where `Z` is the partition function, `W` are weights and `b` are biases.
 - `W::Matrix{Float64}` - weights relating the variables (symmetric, zeros on main diagonal)
 - `b::Vector{Float64}` - biases governing neural excitability
 - `τ::Int` - time constant encoding for how many steps `z` is `true` after a spike
+- `g::G` - refractoriness function for sampling with relative refr. period
+- `f::F` - activation function for sampling with relative refr. period
 """
-struct BoltzmannNetwork
+struct BoltzmannNetwork{G, F}
     ζ::Vector{Int}
     z::Vector{Bool}
     u::Vector{Float64}
     W::Matrix{Float64}
     b::Vector{Float64}
     τ::Int
+    g::G
+    f::F
     
     # constructor to enforce constraints on W
-    function BoltzmannNetwork(ζ, z, u, W, b, τ)
+    function BoltzmannNetwork(ζ, z, u, W, b, τ, g, f)
         for i in 1:size(W, 1)
             @assert W[i, i] == 0.0 "Main diagonal of weight matrix has to be all zeros."
             for j in i:size(W, 2)
                 @assert W[i, j] == W[j, i] "Weight matrix has to be symmetric."
             end
         end
-        return new(ζ, z, u, W, b, τ)
+        return new{typeof(g), typeof(f)}(ζ, z, u, W, b, τ, g, f)
     end
 end
 
 "Generate a random `BoltzmannNetwork` of `n` neurons."
-function randomnetwork(n::Int; τ=20) # τ as in Buesing et al. (2011)
+function randomnetwork(n::Int; τ=20, g=g) # τ as in Buesing et al. (2011)
     ζ = zeros(Int, n)
     z = zeros(Bool, n)
     u = zeros(Float64, n)
@@ -84,24 +90,15 @@ function randomnetwork(n::Int; τ=20) # τ as in Buesing et al. (2011)
         end
     end
     b = randn(n) * 0.5 .- 1.5 # scaling as in Buesing et al. (2011), Fig. 3, 5, 6, 7
-    return BoltzmannNetwork(ζ, z, u, W, b, τ)
+    
+    f = gettransferfun(g, τ=τ)
+    return BoltzmannNetwork(ζ, z, u, W, b, τ, g, f)
 end
 
 
 ###############################################################################
 # Sampling with absolute refractory period.                                   #
 ###############################################################################
-#
-# The sigmoid is required as a transfer function
-"The sigmoid / logistic function: σ(x) = 1 / (1 - exp(-x))"
-function σ(x)
-    if x >= 0
-        return 1 / (1 - exp(-x))
-    else
-        return exp(x) / (1 + exp(x)) # numerically stable version for negative numbers
-    end
-end
-
 """
     step_absolute!(net::BoltzmannNetwork)
 
@@ -241,8 +238,6 @@ function gettransferfun(g; τ=20)
     return f
 end
 
-f = gettransferfun(g)
-
 # Given the correct transfer function, we can implement the sampling
 """
     step_relative!(net::BoltzmannNetwork)
@@ -266,7 +261,7 @@ The neural refactoriness is given by `g(ζ)`. At each point, the neuron fires wi
 probability `g(ζ) * f(u)`. A spike sets `z` to `true` and `ζ` to `τ`. If the neuron
 does not spike, `ζ` decreases and `z` is set to `false` once `ζ` becomes `0`.
 """
-function step_relative!(net::BoltzmannNetwork; g=g, f=f)
+function step_relative!(net::BoltzmannNetwork)
     spikes = zeros(Bool, length(net.z))
     # update neurons
     # (in order, since transition operators have to be applied sequentially)
@@ -274,7 +269,7 @@ function step_relative!(net::BoltzmannNetwork; g=g, f=f)
         # update membrane potential
         net.u[i] = net.b[i] + net.W[i, :]' * net.z
         # generate spike with probability g(ζ) * f(u), otherwise decay ζ
-        if (rand() < g(net.ζ[i] / net.τ) * f(net.u[i]))
+        if (rand() < net.g(net.ζ[i] / net.τ) * net.f(net.u[i]))
             spikes[i] = true
             net.ζ[i] = net.τ
             net.z[i] = 1
@@ -299,20 +294,17 @@ with step size `dt`.
 - `ts::Vector{Float64}` - vector of spike times
 - `inds::Vector{Int}` - vector of neuron indices of neurons that spiked 
 """
-function sample_relative!(net, steps, burnin, dt; g=g)
-    # approximate transfer function f
-    f = gettransferfun(g, τ=net.τ)
-    
+function sample_relative!(net, steps, burnin, dt)
     # run the Markov chain for burn-in period
     for _ in 1:burnin
-        step_relative!(net, g=g, f=f)
+        step_relative!(net)
     end
     
     # sample spikes 
     ts = zeros(0)
     inds = zeros(Int, 0)
     for t in 1:steps
-        spikes = step_relative!(net, g=g, f=f)
+        spikes = step_relative!(net)
         for spike in findall(spikes)
             push!(ts, t * dt)
             push!(inds, spike)
