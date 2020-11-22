@@ -25,8 +25,9 @@ following methods from the paper:
 module BoltzmannNetworks
 
 using ..Utils: σ
+import ..Utils: spikes2chain
+import Base: show, length
 
-import Base: show
 export BoltzmannNetwork
 export randomnetwork, sample_absolute!, sample_relative!
 
@@ -315,7 +316,24 @@ end
 
 
 ###############################################################################
-# Pretty printing                                                             #
+# Conversion of spike sequence into Markov chain                              #
+###############################################################################
+function spikes2chain(ts, inds, net, dt; start=0, stop=nothing)
+    if stop == nothing
+        stop = maximum(ts) + net.τ * dt
+    end
+    timesteps = round(Int, (stop - start) / dt)
+    chain = zeros(Bool, length(net), timesteps)
+    for (t, i) in zip(ts, inds)
+        # each spike sets the corresponding variable to true for τ timesteps
+        tᵢₙₜ = max(1, round(Int, (t - start) / dt))
+        chain[i, tᵢₙₜ:min(timesteps, tᵢₙₜ+τ)] .= true
+    end
+    return chain
+end
+
+###############################################################################
+# Overloads for pretty printing etc.                                          #
 ###############################################################################
 function Base.show(io::IO, net::BoltzmannNetwork)
     print(io, "BoltzmannNetwork of $(length(net.z)) neurons.")
@@ -330,6 +348,10 @@ function Base.show(io::IO, ::MIME"text/plain", net::BoltzmannNetwork)
         "\t b = $(net.b) \n",
         "\t τ = $(net.τ)"
     )
+end
+
+function Base.length(net::BoltzmannNetwork)
+    return length(net.z)
 end
 
 end # module BoltzmannNetworks

@@ -3,7 +3,7 @@ module NeuralSampling
 using Reexport
 
 include("Utils.jl")
-using .Utils
+@reexport using .Utils
 
 include("BoltzmannNetworks.jl")
 @reexport using .BoltzmannNetworks
