@@ -369,14 +369,14 @@ and the neurons at indices `clamp_off` to `false`.
 function sample_clamp!(net, steps, burnin, dt, clamp_on, clamp_off)
     # run the Markov chain for burn-in period
     for _ in 1:burnin
-        step_relative_clamp!(net, clamp_on, clamp_off)
+        step_clamp!(net, clamp_on, clamp_off)
     end
     
     # sample spikes 
     ts = zeros(0)
     inds = zeros(Int, 0)
     for t in 1:steps
-        spikes = step_relative_clamp!(net, clamp_on, clamp_off)
+        spikes = step_clamp!(net, clamp_on, clamp_off)
         for spike in findall(spikes)
             push!(ts, t * dt)
             push!(inds, spike)
