@@ -327,7 +327,7 @@ function spikes2chain(ts, inds, net, dt; start=0, stop=nothing)
     for (t, i) in zip(ts, inds)
         # each spike sets the corresponding variable to true for τ timesteps
         tᵢₙₜ = max(1, round(Int, (t - start) / dt))
-        chain[i, tᵢₙₜ:min(timesteps, tᵢₙₜ+τ)] .= true
+        chain[i, tᵢₙₜ:min(timesteps, tᵢₙₜ+net.τ)] .= true
     end
     return chain
 end
