@@ -29,7 +29,7 @@ import ..Utils: spikes2chain
 import Base: show, length
 
 export BoltzmannNetwork
-export randomnetwork, sample_absolute!, sample_relative!
+export randomnetwork, sample_absolute!, sample_relative!, sample_clamp!
 
 ###############################################################################
 # Network type                                                                #
@@ -314,6 +314,76 @@ function sample_relative!(net, steps, burnin, dt)
     return ts, inds
 end
 
+###############################################################################
+# Sampling with clamped values (inferring posterior)                          #
+###############################################################################
+"""
+    step_clamp!(net::BoltzmannNetwork, clamp_on, clamp_off)
+
+Performs one step of neural sampling with relative refractory period in `net`
+while clamping the neurons at indices `clamp_on` to `true` and the neurons at
+indices `clamp_off` to `false`.
+"""
+function step_relative_clamp!(net::BoltzmannNetwork, clamp_on, clamp_off)
+    spikes = zeros(Bool, length(net.z))
+    # update neurons
+    # (in order, since transition operators have to be applied sequentially)
+    for i in shuffle(1:length(spikes))
+        if i in clamp_on
+            net.z[i] = true
+            continue
+        end
+        if i in clamp_off
+            net.z[i] = false
+            continue
+        end
+        # update membrane potential
+        net.u[i] = net.b[i] + net.W[i, :]' * net.z
+        # generate spike with probability g(ζ) * f(u), otherwise decay ζ
+        if (rand() < net.g(net.ζ[i] / net.τ) * net.f(net.u[i]))
+            spikes[i] = true
+            net.ζ[i] = net.τ
+            net.z[i] = 1
+        else
+            net.ζ[i] = max(net.ζ[i] - 1)
+            if net.ζ[i] == 0
+                net.z[i] = 0
+            end
+        end
+    end
+    return(spikes)
+end
+
+"""
+    sample_clamp!(net, steps, burnin, dt, clamp_on, clamp_off)
+    
+Performs neural sampling with relative refractory period in discrete time in
+`BoltzmannNet` `net` for `steps` steps after a burnin time of `burnin` steps
+with step size `dt` while clamping the neurons at indices `clamp_on` to `true`
+and the neurons at indices `clamp_off` to `false`.
+
+# Returns
+- `ts::Vector{Float64}` - vector of spike times
+- `inds::Vector{Int}` - vector of neuron indices of neurons that spiked 
+"""
+function sample_clamp!(net, steps, burnin, dt, clamp_on, clamp_off)
+    # run the Markov chain for burn-in period
+    for _ in 1:burnin
+        step_relative_clamp!(net, clamp_on, clamp_off)
+    end
+    
+    # sample spikes 
+    ts = zeros(0)
+    inds = zeros(Int, 0)
+    for t in 1:steps
+        spikes = step_relative_clamp!(net, clamp_on, clamp_off)
+        for spike in findall(spikes)
+            push!(ts, t * dt)
+            push!(inds, spike)
+        end
+    end
+    return ts, inds
+end
 
 ###############################################################################
 # Conversion of spike sequence into Markov chain                              #
