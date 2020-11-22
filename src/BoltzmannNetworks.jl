@@ -24,6 +24,7 @@ following methods from the paper:
 """
 module BoltzmannNetworks
 
+using Random: shuffle
 using ..Utils: σ
 import ..Utils: spikes2chain
 import Base: show, length
